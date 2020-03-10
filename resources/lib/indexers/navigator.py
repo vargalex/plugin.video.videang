@@ -77,7 +77,8 @@ class navigator:
             self.addDirectoryItem(title, 'playmovie&url=%s' % href, "%s%s" % ('' if 'http' in img else base_url, img), 'DefaultMovies.png', meta={'title': title, 'plot': '', 'duration': duration}, isFolder=False)
         if "pagination" in url_content:
             pagination = client.parseDOM(url_content, 'ul', attrs={'class': 'pagination'})
-            kovetkezo = client.parseDOM(pagination, 'a', attrs={'title': u'következő'}, ret='href')[0]
+            lis = client.parseDOM(pagination, 'li')
+            kovetkezo = client.parseDOM(lis[len(lis)-1], 'a', ret='href')[0]
             self.addDirectoryItem(u'[I]K\u00F6vetkez\u0151 oldal >>[/I]', 'videos&url=%s&params=%s' % (urllib.quote_plus(url), urllib.quote_plus(kovetkezo)), '', 'DefaultFolder.png')
         self.endDirectory('movies')
 
