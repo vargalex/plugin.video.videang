@@ -1,2 +1,5 @@
-﻿[B]1.0.0[/B]
+﻿[B]1.0.1[/B]
+- Következő oldal link javítása
+
+[B]1.0.0[/B]
 - Első verzió
