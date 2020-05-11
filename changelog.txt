@@ -1,4 +1,7 @@
-﻿[B]1.0.1[/B]
+﻿[B]1.0.2[/B]
+- Videók keresése * segítségével
+
+[B]1.0.1[/B]
 - Következő oldal link javítása
 
 [B]1.0.0[/B]
