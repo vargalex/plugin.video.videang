@@ -54,7 +54,7 @@ class navigator:
     def doSearch(self):
         search_text = self.getSearchText()
         if search_text != '':
-            self.getVideos(url="/video_kereses/%s" % urllib.quote_plus(search_text), params=None)
+            self.getVideos(url="/video_kereses/%s" % urllib.quote(search_text, safe='*'), params=None)
 
     def getVideos(self, url, params):
         url_content = client.request('%s%s%s' % (base_url, url, '' if params == None else params))
