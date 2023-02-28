@@ -19,15 +19,21 @@
 '''
 
 
-import os,sys,re,xbmc,xbmcgui,xbmcplugin,xbmcaddon,urllib,urlparse,base64,time, json
-import urlresolver
-from resources.lib.modules import client
+import os,sys,re,xbmc,xbmcgui,xbmcplugin,xbmcaddon,base64,time, json, random, string, struct
+from resources.lib.modules import client, xmltodict
+
+if sys.version_info[0] == 3:
+    import urllib.parse as urlparse
+    from urllib.parse import quote, quote_plus
+else:
+    import urlparse
+    from urllib import quote, quote_plus
+
 
 sysaddon = sys.argv[0] ; syshandle = int(sys.argv[1])
 addonFanart = xbmcaddon.Addon().getAddonInfo('fanart')
 
-base_url = 'aHR0cHM6Ly92aWRlYS5odQ=='.decode('base64')
-base_url_http = 'aHR0cDovL3ZpZGVhLmh1'.decode('base64')
+base_url = 'https://videa.hu'
 
 class navigator:
     def root(self):
@@ -48,20 +54,20 @@ class navigator:
                 for subMenuItem in subMenuItems:
                     name = client.parseDOM(subMenuItem, 'a')[0].encode('utf-8')
                     href = client.parseDOM(subMenuItem, 'a', ret='href')[0].replace(base_url, '')
-                    self.addDirectoryItem(name, 'videos&url=%s' % urllib.quote_plus(href), '', 'DefaultFolder.png')
+                    self.addDirectoryItem(name, 'videos&url=%s' % quote_plus(href), '', 'DefaultFolder.png')
         self.endDirectory('movies')
 
     def doSearch(self):
         search_text = self.getSearchText()
         if search_text != '':
-            self.getVideos(url="/video_kereses/%s" % urllib.quote(search_text, safe='*'), params=None)
+            self.getVideos(url="/video_kereses/%s" % quote(search_text, safe='*'), params=None)
 
     def getVideos(self, url, params):
         url_content = client.request('%s%s%s' % (base_url, url, '' if params == None else params))
+        url_content = client.request('%s%s%s' % (base_url, url, '' if params == None else params), cookie="session_adult=1" if xbmcaddon.Addon().getSetting('enableAdult') == 'true' else "")
         if "adult-content" in url_content:
-            if not xbmcgui.Dialog().yesno('Felnőtt tartalom!', 'Ez a tartalom olyan elemeket tartalmazhat, amelyek a hatályos jogszabályok kategóriái szerint kiskorúakra károsak lehetnek. Ha azt szeretnéd, hogy az ilyen tartalmakhoz erről a számítógépről kiskorú ne férhessen hozzá, használj szűrőprogramot!', line2='Ha elmúltál 18 éves, az "Elmúltam 18 éves" gombra kattinthatsz és a tartalom a számodra elérhető lesz.', line3='Ha nem múltál el 18 éves, kattints a "Nem múltam el 18 éves" gombra; ez a tartalom a számodra nem lesz elérhető.', nolabel='Nem múltam el 18 éves', yeslabel='Elmúltam 18 éves'):
-                return                
-            url_content = client.request('%s%s' % (base_url, url), cookie="session_adult=1")
+            xbmcgui.Dialog().ok('Felnőtt tartalom!', 'Ez a tartalom olyan elemeket tartalmazhat, amelyek a hatályos jogszabályok kategóriái szerint kiskorúakra károsak lehetnek. A  hozzáférés jelenleg tiltott!')
+            return                
         videos = client.parseDOM(url_content, 'div', attrs={'class': 'panel panel-video'})
         for video in videos:
             heading = client.parseDOM(video, 'div', attrs={'class': 'panel-heading'})
@@ -79,22 +85,98 @@ class navigator:
             pagination = client.parseDOM(url_content, 'ul', attrs={'class': 'pagination'})
             lis = client.parseDOM(pagination, 'li')
             kovetkezo = client.parseDOM(lis[len(lis)-1], 'a', ret='href')[0]
-            self.addDirectoryItem(u'[I]K\u00F6vetkez\u0151 oldal >>[/I]', 'videos&url=%s&params=%s' % (urllib.quote_plus(url), urllib.quote_plus(kovetkezo)), '', 'DefaultFolder.png')
+            self.addDirectoryItem(u'[I]K\u00F6vetkez\u0151 oldal >>[/I]', 'videos&url=%s&params=%s' % (quote_plus(url), quote_plus(kovetkezo)), '', 'DefaultFolder.png')
         self.endDirectory('movies')
 
     def playmovie(self, url):
-        xbmc.log('VideaNG: resolving url: %s' % url, xbmc.LOGNOTICE)
+        def rc4(cipher_text, key):
+            def compat_ord(c):
+                return c if isinstance(c, int) else ord(c)
+                
+            res = b''
+
+            key_len = len(key)
+            S = list(range(256))
+
+            j = 0
+            for i in range(256):
+                j = (j + S[i] + ord(key[i % key_len])) % 256
+                S[i], S[j] = S[j], S[i]
+
+            i = 0
+            j = 0
+            for m in range(len(cipher_text)):
+                i = (i + 1) % 256
+                j = (j + S[i]) % 256
+                S[i], S[j] = S[j], S[i]
+                k = S[(S[i] + S[j]) % 256]
+                res += struct.pack('B', k ^ compat_ord(cipher_text[m]))
+
+            if sys.version_info[0] == 3:
+                return res.decode()
+            else:
+                return res
+
+        STATIC_SECRET = 'xHb0ZvME5q8CBcoQi6AngerDu3FGO9fkUlwPmLVY_RTzj2hJIS4NasXWKy1td7p'
+        xbmc.log('VideaNG: resolving url: %s' % url, xbmc.LOGINFO)
+        video_page = client.request(url, cookie="session_adult=1")
+        if '/player' in url:
+            player_url = url
+            player_page = video_page
+        else:
+            player_url = re.search(r'<iframe.*?src="(/player\?[^"]+)"', video_page).group(1)
+            player_url = urlparse.urljoin(url, player_url)
+            player_page = client.request(player_url)
+        nonce = re.search(r'_xt\s*=\s*"([^"]+)"', player_page).group(1)
+        l = nonce[:32]
+        s = nonce[32:]
+        result = ''
+        for i in range(0, 32):
+            result += s[i - (STATIC_SECRET.index(l[i]) - 31)]
+        query = urlparse.parse_qs(urlparse.urlparse(player_url).query)
+        random_seed = ''
+        for i in range(8):
+            random_seed += random.choice(string.ascii_letters + string.digits)
+        _s = random_seed
+        _t = result[:16]
+        if 'f' in query or 'v' in query:
+            _param = 'f=%s' % query['f'][0] if 'f' in query else 'v=%s' % query['v'][0]
+        videaXml, headers, cookie = client.request('https://videa.hu/player/xml?platform=desktop&%s&_s=%s&_t=%s' % (_param, _s, _t), output='extended')
+        if not videaXml.startswith('<?xml'):
+            key = result[16:] + random_seed + headers['x-videa-xs']
+            videaXml = rc4(base64.b64decode(videaXml), key)
+        videaData = xmltodict.parse(videaXml)
+        sources = []
+        sourcesList = []
+        if not isinstance(videaData['videa_video']['video_sources']['video_source'], list):
+            sourcesList.append(videaData['videa_video']['video_sources']['video_source'])
+        else:
+            sourcesList = videaData['videa_video']['video_sources']['video_source']
+        for source in sourcesList:
+            src = {}
+            src["resolution"] = source["@name"]
+            src["width"] = source["@width"]
+            src["height"] = source["@height"]
+            src["hd"] = source["@is_hd"]
+            src["expiration"] = source["@exp"]
+            src["url"] = "%s%s" % ('' if 'http' in source["#text"] else 'https:', source["#text"])
+            src["hash"] = videaData['videa_video']['hash_values']['hash_value_%s' % src["resolution"]]
+            sources.append(src)
         try:
-            direct_url = urlresolver.resolve(url)
-            if direct_url:
-                direct_url = direct_url.encode('utf-8')
-        except Exception as e:
-            xbmcgui.Dialog().notification(urlparse.urlparse(url).hostname, e.message)
-            return
-        if direct_url:
-            xbmc.log('VideaNG: playing URL: %s' % direct_url, xbmc.LOGNOTICE)
-            play_item = xbmcgui.ListItem(path=direct_url)
-            xbmcplugin.setResolvedUrl(syshandle, True, listitem=play_item)
+            sources.sort(key=lambda x: int(x['resolution'].replace('p', '')), reverse=True)
+        except:
+            pass
+        auto_pick = xbmcaddon.Addon().getSetting('autopick') == '1'
+        if len(sources) > 0:
+            if len(sources) == 1 or auto_pick == True:
+                result = 0
+            else:
+                result = xbmcgui.Dialog().select(u'Min\u0151s\u00E9g', [source["resolution"] for source in sources])
+            if result > -1:
+                direct_url = "%s?md5=%s&expires=%s" % (sources[result]["url"], sources[result]["hash"], sources[result]["expiration"])
+                xbmc.log('VideaNG: final url: %s' % direct_url, xbmc.LOGINFO)
+                play_item = xbmcgui.ListItem(path=direct_url)
+                xbmcplugin.setResolvedUrl(syshandle, True, listitem=play_item)
 
     def addDirectoryItem(self, name, query, thumb, icon, context=None, queue=False, isAction=True, isFolder=True, Fanart=None, meta=None, banner=None):
         url = '%s?action=%s' % (sysaddon, query) if isAction == True else query

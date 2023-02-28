@@ -1,14 +1,23 @@
 # -*- coding: utf-8 -*-
 
-import re,hashlib,time,xbmc,os,xbmcaddon
+import re,hashlib,time,os,xbmcaddon, sys
 
 try:
     from sqlite3 import dbapi2 as database
 except:
     from pysqlite2 import dbapi2 as database
 
+if sys.version_info[0] == 3:
+    from xbmcvfs import translatePath
+else:
+    from xbmc import translatePath
+
+
 addonInfo = xbmcaddon.Addon().getAddonInfo
-dataPath = xbmc.translatePath(addonInfo('profile')).decode('utf-8')
+try:
+    dataPath = translatePath(addonInfo('profile')).decode('utf-8')
+except:
+    dataPath = translatePath(addonInfo('profile'))
 cacheFile = os.path.join(dataPath, 'cache.db')
 
 def get(function, timeout, *args, **table):

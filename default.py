@@ -19,9 +19,14 @@
 '''
 
 
-import urlparse,sys, xbmcgui
+import sys, xbmcgui
 
-params = dict(urlparse.parse_qsl(sys.argv[2].replace('?','')))
+if sys.version_info[0] == 3:
+    from urllib.parse import parse_qsl
+else:
+    from urlparse import parse_qsl
+
+params = dict(parse_qsl(sys.argv[2].replace('?','')))
 
 action = params.get('action')
 

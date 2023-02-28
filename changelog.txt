@@ -1,4 +1,10 @@
-﻿[B]1.0.2[/B]
+﻿[B]1.0.4[/B]
+- Dekódolás megoldása
+
+[B]1.0.3[/B]
+- Python 2 függőség eltávolítása
+
+[B]1.0.2[/B]
 - Videók keresése * segítségével
 
 [B]1.0.1[/B]
