@@ -83,7 +83,20 @@ class navigator:
             self.getVideos(url="/video_kereses/", search = search_text, params=None)
 
     def getVideos(self, url, params=None, search=None):
-        url_content = client.request('%s%s%s%s' % (base_url, url, '' if search == None else quote_plus(search), '' if params == None else params), cookie="session_adult=1" if xbmcaddon.Addon().getSetting('enableAdult') == 'true' else "")
+        searchExt = ''
+        if not search == None:
+            url_content = client.request('%s%s' % (base_url, url))
+            categoriesSelect = client.parseDOM(url_content, 'select', attrs={'name': 'sift'})[0]
+            categories = client.parseDOM(categoriesSelect, 'option')
+            allCategories = []
+            for category in categories:
+                allCategories.append(category)
+            selectedCategory = xbmcgui.Dialog().select("Kategória választás", allCategories, preselect = 0)
+            if selectedCategory >= 0:
+                searchExt = client.parseDOM(categoriesSelect, 'option', ret='value')[selectedCategory]
+            else:
+                return
+        url_content = client.request('%s%s%s%s%s' % (base_url, url, '' if search == None else quote_plus(search), '' if params == None else params, searchExt), cookie="session_adult=1" if xbmcaddon.Addon().getSetting('enableAdult') == 'true' else "")
         if "adult-content" in url_content:
             xbmcgui.Dialog().ok('Felnőtt tartalom!', 'Ez a tartalom olyan elemeket tartalmazhat, amelyek a hatályos jogszabályok kategóriái szerint kiskorúakra károsak lehetnek. A  hozzáférés jelenleg tiltott!')
             return                
@@ -104,7 +117,7 @@ class navigator:
             pagination = client.parseDOM(url_content, 'ul', attrs={'class': 'pagination'})
             lis = client.parseDOM(pagination, 'li')
             kovetkezo = client.parseDOM(lis[len(lis)-1], 'a', ret='href')[0]
-            self.addDirectoryItem(u'[I]K\u00F6vetkez\u0151 oldal >>[/I]', 'videos&url=%s&params=%s' % (quote_plus(url), quote_plus(kovetkezo)), '', 'DefaultFolder.png')
+            self.addDirectoryItem(u'[I]K\u00F6vetkez\u0151 oldal >>[/I]', 'videos&url=%s%s&params=%s' % (quote_plus(url), '' if search == None else quote_plus(search), quote_plus(kovetkezo)), '', 'DefaultFolder.png')
         self.endDirectory('movies')
 
     def playmovie(self, url):

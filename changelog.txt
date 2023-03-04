@@ -1,4 +1,7 @@
-﻿[B]1.0.5[/B]
+﻿[B]1.0.6[/B]
+- Keresés esetén kategória választási lehetőség
+
+[B]1.0.5[/B]
 - Keresési előzmények tárolása
 
 [B]1.0.4[/B]
