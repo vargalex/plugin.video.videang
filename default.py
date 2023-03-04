@@ -36,23 +36,27 @@ search = params.get('search')
 
 params = params.get('params')
 
+
+from resources.lib.indexers import navigator
+
 if action == None:
-    from resources.lib.indexers import navigator
     navigator.navigator().root()
 
 elif action == 'submenus':
-    from resources.lib.indexers import navigator
     navigator.navigator().getSubmenus(url)
 
 
 elif action == 'videos':
-    from resources.lib.indexers import navigator
-    navigator.navigator().getVideos(url, params)
+    navigator.navigator().getVideos(url, params, search)
 
 elif action == 'playmovie':
-    from resources.lib.indexers import navigator
     navigator.navigator().playmovie(url)
 
 elif action == 'search':
-    from resources.lib.indexers import navigator
+    navigator.navigator().getSearches()
+
+elif action == 'newsearch':
     navigator.navigator().doSearch()
+
+elif action == 'deletesearchhistory':
+    navigator.navigator().deleteSearchHistory()

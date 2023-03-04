@@ -19,15 +19,18 @@
 '''
 
 
-import os,sys,re,xbmc,xbmcgui,xbmcplugin,xbmcaddon,base64,time, json, random, string, struct
+import os, sys, re, xbmc, xbmcgui, xbmcplugin, xbmcaddon, base64, random, string, struct, locale
 from resources.lib.modules import client, xmltodict
+from resources.lib.modules.utils import py2_encode, py2_decode
 
 if sys.version_info[0] == 3:
     import urllib.parse as urlparse
     from urllib.parse import quote, quote_plus
+    from xbmcvfs import translatePath
 else:
     import urlparse
     from urllib import quote, quote_plus
+    from xbmc import translatePath
 
 
 sysaddon = sys.argv[0] ; syshandle = int(sys.argv[1])
@@ -36,6 +39,18 @@ addonFanart = xbmcaddon.Addon().getAddonInfo('fanart')
 base_url = 'https://videa.hu'
 
 class navigator:
+
+    def __init__(self):
+        try:
+            locale.setlocale(locale.LC_ALL, "hu_HU.UTF-8")
+        except:
+            try:
+                locale.setlocale(locale.LC_ALL, "")
+            except:
+                pass
+        self.base_path = py2_decode(translatePath(xbmcaddon.Addon().getAddonInfo('profile')))
+        self.searchFileName = os.path.join(self.base_path, "search.history")
+
     def root(self):
         mainMenu = {'menu-categories': 'Kategóriák', 'menu-channels': 'Csatornák'}
         for menuItem in mainMenu:
@@ -60,11 +75,15 @@ class navigator:
     def doSearch(self):
         search_text = self.getSearchText()
         if search_text != '':
-            self.getVideos(url="/video_kereses/%s" % quote(search_text, safe='*'), params=None)
+            if not os.path.exists(self.base_path):
+                os.mkdir(self.base_path)
+            file = open(self.searchFileName, "a")
+            file.write("%s\n" % search_text)
+            file.close()
+            self.getVideos(url="/video_kereses/", search = search_text, params=None)
 
-    def getVideos(self, url, params):
-        url_content = client.request('%s%s%s' % (base_url, url, '' if params == None else params))
-        url_content = client.request('%s%s%s' % (base_url, url, '' if params == None else params), cookie="session_adult=1" if xbmcaddon.Addon().getSetting('enableAdult') == 'true' else "")
+    def getVideos(self, url, params=None, search=None):
+        url_content = client.request('%s%s%s%s' % (base_url, url, '' if search == None else quote_plus(search), '' if params == None else params), cookie="session_adult=1" if xbmcaddon.Addon().getSetting('enableAdult') == 'true' else "")
         if "adult-content" in url_content:
             xbmcgui.Dialog().ok('Felnőtt tartalom!', 'Ez a tartalom olyan elemeket tartalmazhat, amelyek a hatályos jogszabályok kategóriái szerint kiskorúakra károsak lehetnek. A  hozzáférés jelenleg tiltott!')
             return                
@@ -194,10 +213,10 @@ class navigator:
         xbmcplugin.addDirectoryItem(handle=syshandle, url=url, listitem=item, isFolder=isFolder)
 
 
-    def endDirectory(self, type='addons'):
+    def endDirectory(self, type='addons', cache=True):
         xbmcplugin.setContent(syshandle, type)
         #xbmcplugin.addSortMethod(syshandle, xbmcplugin.SORT_METHOD_TITLE)
-        xbmcplugin.endOfDirectory(syshandle, cacheToDisc=True)
+        xbmcplugin.endOfDirectory(syshandle, cacheToDisc=cache)
 
     def getSearchText(self):
         search_text = ''
@@ -207,4 +226,28 @@ class navigator:
         if (keyb.isConfirmed()):
             search_text = keyb.getText()
 
-        return search_text
+        return py2_encode(search_text)
+
+    def getSearches(self):
+        self.addDirectoryItem('[COLOR lightblue]Új keresés[/COLOR]', 'newsearch', '', 'DefaultFolder.png')
+        try:
+            file = open(self.searchFileName, "r")
+            olditems = file.read().splitlines()
+            file.close()
+            items = list(set(olditems))
+            items.sort(key=locale.strxfrm)
+            if len(items) != len(olditems):
+                file = open(self.searchFileName, "w")
+                file.write("\n".join(items))
+                file.close()
+            for item in items:
+                self.addDirectoryItem(item, 'videos&url=/video_kereses/&search=%s' % quote_plus(item), '', 'DefaultFolder.png')
+            if len(items) > 0:
+                self.addDirectoryItem('[COLOR red]Keresési előzmények törlése[/COLOR]', 'deletesearchhistory', '', 'DefaultFolder.png')
+        except:
+            pass
+        self.endDirectory(cache=False)
+
+    def deleteSearchHistory(self):
+        if os.path.exists(self.searchFileName):
+            os.remove(self.searchFileName)

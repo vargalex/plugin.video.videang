@@ -1,4 +1,7 @@
-﻿[B]1.0.4[/B]
+﻿[B]1.0.5[/B]
+- Keresési előzmények tárolása
+
+[B]1.0.4[/B]
 - Dekódolás megoldása
 
 [B]1.0.3[/B]
