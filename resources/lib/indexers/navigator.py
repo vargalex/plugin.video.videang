@@ -25,11 +25,11 @@ from resources.lib.modules.utils import py2_encode, py2_decode
 
 if sys.version_info[0] == 3:
     import urllib.parse as urlparse
-    from urllib.parse import quote, quote_plus
+    from urllib.parse import quote, quote_plus, unquote_plus
     from xbmcvfs import translatePath
 else:
     import urlparse
-    from urllib import quote, quote_plus
+    from urllib import quote, quote_plus, unquote_plus
     from xbmc import translatePath
 
 
@@ -96,7 +96,7 @@ class navigator:
                 searchExt = client.parseDOM(categoriesSelect, 'option', ret='value')[selectedCategory]
             else:
                 return
-        url_content = client.request('%s%s%s%s%s' % (base_url, url, '' if search == None else quote_plus(search), '' if params == None else params, searchExt), cookie="session_adult=1" if xbmcaddon.Addon().getSetting('enableAdult') == 'true' else "")
+        url_content = client.request('%s%s%s%s%s' % (base_url, quote(url), '' if search == None else quote_plus(search), '' if params == None else params, searchExt), cookie="session_adult=1" if xbmcaddon.Addon().getSetting('enableAdult') == 'true' else "")
         if "adult-content" in url_content:
             xbmcgui.Dialog().ok('Felnőtt tartalom!', 'Ez a tartalom olyan elemeket tartalmazhat, amelyek a hatályos jogszabályok kategóriái szerint kiskorúakra károsak lehetnek. A  hozzáférés jelenleg tiltott!')
             return                
@@ -115,8 +115,8 @@ class navigator:
             self.addDirectoryItem(title, 'playmovie&url=%s' % href, "%s%s" % ('' if 'http' in img else base_url, img), 'DefaultMovies.png', meta={'title': title, 'plot': '', 'duration': duration}, isFolder=False)
         if "pagination" in url_content:
             pagination = client.parseDOM(url_content, 'ul', attrs={'class': 'pagination'})
-            lis = client.parseDOM(pagination, 'li')
-            kovetkezo = client.parseDOM(lis[len(lis)-1], 'a', ret='href')[0]
+            lis = client.parseDOM(pagination, 'li')[-1]
+            kovetkezo = client.parseDOM(lis, 'a', ret='href')[0]
             self.addDirectoryItem(u'[I]K\u00F6vetkez\u0151 oldal >>[/I]', 'videos&url=%s%s&params=%s' % (quote_plus(url), '' if search == None else quote_plus(search), quote_plus(kovetkezo)), '', 'DefaultFolder.png')
         self.endDirectory('movies')
 

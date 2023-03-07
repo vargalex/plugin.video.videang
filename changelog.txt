@@ -1,4 +1,7 @@
-﻿[B]1.0.6[/B]
+﻿[B]1.0.7[/B]
+- Keresési eredmény lapozásának javítása
+
+[B]1.0.6[/B]
 - Keresés esetén kategória választási lehetőség
 
 [B]1.0.5[/B]
