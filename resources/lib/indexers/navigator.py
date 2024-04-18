@@ -21,7 +21,7 @@
 
 import os, sys, re, xbmc, xbmcgui, xbmcplugin, xbmcaddon, base64, random, string, struct, locale
 from resources.lib.modules import client, xmltodict
-from resources.lib.modules.utils import py2_encode, py2_decode
+from resources.lib.modules.utils import py2_encode, py2_decode, safeopen
 
 if sys.version_info[0] == 3:
     import urllib.parse as urlparse
@@ -50,11 +50,14 @@ class navigator:
                 pass
         self.base_path = py2_decode(translatePath(xbmcaddon.Addon().getAddonInfo('profile')))
         self.searchFileName = os.path.join(self.base_path, "search.history")
+        self.downloadsubtitles = xbmcaddon.Addon().getSettingBool('downloadsubtitles')
+        self.base_path = py2_decode(translatePath(xbmcaddon.Addon().getAddonInfo('profile')))
 
     def root(self):
         mainMenu = {'menu-categories': 'Kategóriák', 'menu-channels': 'Csatornák'}
         for menuItem in mainMenu:
             self.addDirectoryItem(mainMenu[menuItem], 'submenus&url=%s' % menuItem, '', 'DefaultFolder.png')
+        self.addDirectoryItem('Közvetlen Videa URL lejátszása', 'playdirecturl', '', 'DefaultMovies.png', isFolder=False)
         self.addDirectoryItem('Keresés', 'search', '', 'DefaultFolder.png')
         self.endDirectory()
 
@@ -73,7 +76,7 @@ class navigator:
         self.endDirectory('movies')
 
     def doSearch(self):
-        search_text = self.getSearchText()
+        search_text = self.getText(u'Add meg a keresend\xF5 film c\xEDm\xE9t')
         if search_text != '':
             if not os.path.exists(self.base_path):
                 os.mkdir(self.base_path)
@@ -149,6 +152,7 @@ class navigator:
             else:
                 return res
 
+        url = "%s%s" % ("" if "http" in url else "https:", url)
         STATIC_SECRET = 'xHb0ZvME5q8CBcoQi6AngerDu3FGO9fkUlwPmLVY_RTzj2hJIS4NasXWKy1td7p'
         xbmc.log('VideaNG: resolving url: %s' % url, xbmc.LOGINFO)
         video_page = client.request(url, cookie="session_adult=1")
@@ -208,6 +212,47 @@ class navigator:
                 direct_url = "%s?md5=%s&expires=%s" % (sources[result]["url"], sources[result]["hash"], sources[result]["expiration"])
                 xbmc.log('VideaNG: final url: %s' % direct_url, xbmc.LOGINFO)
                 play_item = xbmcgui.ListItem(path=direct_url)
+                subtitles = []
+                subtitlesList = []
+                if self.downloadsubtitles:
+                    try:
+                        if not isinstance(videaData['videa_video']['subtitles']['subtitle'], list):
+                            subtitlesList.append(videaData['videa_video']['subtitles']['subtitle'])
+                        else:
+                            subtitlesList = videaData['videa_video']['subtitles']['subtitle']
+                    except:
+                        pass
+                    if len(subtitlesList) > 0:
+                        try:
+                            errMsg = ""
+                            if not os.path.exists(os.path.join(self.base_path, "subtitles")):
+                                errMsg = "Hiba a felirat könyvtár létrehozásakor!"
+                                os.mkdir(os.path.join(self.base_path, "subtitles"))
+                            for f in os.listdir(os.path.join(self.base_path, "subtitles")):
+                                errMsg = "Hiba a korábbi feliratok törlésekor!"
+                                os.remove(os.path.join(self.base_path, "subtitles", f))
+                            xbmc.log('VideaNG: subtitle count: %d' % len(subtitlesList), xbmc.LOGINFO)
+                            for subtitle in subtitlesList:
+                                subtitleUrl = "%s%s" % ("" if "http" in subtitle["@src"] else "https:", subtitle["@src"])
+                                subtitleTxt = client.request(subtitleUrl)
+                                if len(subtitleTxt) > 0:
+                                    errMsg = "Hiba a sorozat felirat file kiírásakor!"
+                                    file = safeopen(os.path.join(self.base_path, "subtitles", "%s.srt" % subtitle["@title"].strip()), "w")
+                                    file.write(subtitleTxt)
+                                    file.close()
+                                    errMsg = "Hiba a sorozat felirat file hozzáadásakor!"
+                                    subtitles.append("%s/subtitles/%s.srt" % (self.base_path, subtitle["@title"].strip()))
+                                else:
+                                    xbmc.log("VideaNG: Subtitles not found in source", xbmc.LOGERROR)
+                            if len(subtitles)>0:
+                                errMsg = "Hiba a feliratok beállításakor!"
+                                play_item.setSubtitles(subtitles)
+                        except:
+                            xbmcgui.Dialog().notification("Videa Next Generation hiba", errMsg, xbmcgui.NOTIFICATION_ERROR)
+                            xbmc.log("VideaNG: Hiba a %s URL-hez tartozó felirat letöltésekor, hiba: %s" % (py2_encode(final_url), py2_encode(errMsg)), xbmc.LOGERROR)
+                    else:
+                        xbmc.log("VideaNG: Could not find any subtitles", xbmc.LOGINFO)
+                xbmc.log("VideaNG: Playing url: %s" % direct_url, xbmc.LOGINFO)
                 xbmcplugin.setResolvedUrl(syshandle, True, listitem=play_item)
 
     def addDirectoryItem(self, name, query, thumb, icon, context=None, queue=False, isAction=True, isFolder=True, Fanart=None, meta=None, banner=None):
@@ -231,9 +276,9 @@ class navigator:
         #xbmcplugin.addSortMethod(syshandle, xbmcplugin.SORT_METHOD_TITLE)
         xbmcplugin.endOfDirectory(syshandle, cacheToDisc=cache)
 
-    def getSearchText(self):
+    def getText(self, caption):
         search_text = ''
-        keyb = xbmc.Keyboard('',u'Add meg a keresend\xF5 film c\xEDm\xE9t')
+        keyb = xbmc.Keyboard('', caption)
         keyb.doModal()
 
         if (keyb.isConfirmed()):
@@ -264,3 +309,8 @@ class navigator:
     def deleteSearchHistory(self):
         if os.path.exists(self.searchFileName):
             os.remove(self.searchFileName)
+
+    def playDirectUrl(self):
+        url = self.getText(u'Add meg a teljes videa URL-t!')
+        if url != '':
+            self.playmovie(url)

@@ -1,4 +1,8 @@
-﻿[B]1.0.7[/B]
+﻿[B]1.0.8[/B]
+- Felirat letöltés megvalósítása (beállításokban kapcsolható)
+- Közvetlen URL lejátszása
+
+[B]1.0.7[/B]
 - Keresési eredmény lapozásának javítása
 
 [B]1.0.6[/B]

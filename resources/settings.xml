@@ -2,6 +2,7 @@
 <settings>
     <category label="Általános">
         <setting label="Videó minősége" type="enum" id="autopick" values="Választható|Legjobb" default="0" />
+        <setting label="Felirat letöltésének kísérlete" type="bool" id="downloadsubtitles" default="True"/>
         <setting label="Felnőtt tartalom engedélyezése" type="bool" id="enableAdult" default="false"/>
 	</category>
 </settings>

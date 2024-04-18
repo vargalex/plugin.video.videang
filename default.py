@@ -60,3 +60,6 @@ elif action == 'newsearch':
 
 elif action == 'deletesearchhistory':
     navigator.navigator().deleteSearchHistory()
+
+elif action == 'playdirecturl':
+    navigator.navigator().playDirectUrl()
