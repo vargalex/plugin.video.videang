@@ -63,3 +63,6 @@ elif action == 'deletesearchhistory':
 
 elif action == 'playdirecturl':
     navigator.navigator().playDirectUrl()
+
+elif action == 'logout':
+    navigator.navigator().logout()

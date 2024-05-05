@@ -19,7 +19,7 @@
 '''
 
 
-import os, sys, re, xbmc, xbmcgui, xbmcplugin, xbmcaddon, base64, random, string, struct, locale
+import os, sys, re, xbmc, xbmcgui, xbmcplugin, xbmcaddon, base64, random, string, struct, locale, json, time
 from resources.lib.modules import client, xmltodict
 from resources.lib.modules.utils import py2_encode, py2_decode, safeopen
 
@@ -52,6 +52,7 @@ class navigator:
         self.searchFileName = os.path.join(self.base_path, "search.history")
         self.downloadsubtitles = xbmcaddon.Addon().getSettingBool('downloadsubtitles')
         self.base_path = py2_decode(translatePath(xbmcaddon.Addon().getAddonInfo('profile')))
+        self.login()
 
     def root(self):
         mainMenu = {'menu-categories': 'Kategóriák', 'menu-channels': 'Csatornák'}
@@ -62,7 +63,7 @@ class navigator:
         self.endDirectory()
 
     def getSubmenus(self, url):
-        url_content = client.request('%s' % base_url)
+        url_content = client.request('%s' % base_url, cookie=self.getCookie(None))
         mainMenu = client.parseDOM(url_content, 'ul', attrs={'class': 'main-menu-list'})[0]
         menuItems = client.parseDOM(mainMenu, 'li')
         for menuItem in menuItems:
@@ -88,7 +89,7 @@ class navigator:
     def getVideos(self, url, params=None, search=None):
         searchExt = ''
         if not search == None:
-            url_content = client.request('%s%s' % (base_url, url))
+            url_content = client.request('%s%s' % (base_url, url), cookie=self.getCookie(None))
             categoriesSelect = client.parseDOM(url_content, 'select', attrs={'name': 'sift'})[0]
             categories = client.parseDOM(categoriesSelect, 'option')
             allCategories = []
@@ -99,7 +100,7 @@ class navigator:
                 searchExt = client.parseDOM(categoriesSelect, 'option', ret='value')[selectedCategory]
             else:
                 return
-        url_content = client.request('%s%s%s%s%s' % (base_url, quote(url), '' if search == None else quote_plus(search), '' if params == None else params, searchExt), cookie="session_adult=1" if xbmcaddon.Addon().getSetting('enableAdult') == 'true' else "")
+        url_content = client.request('%s%s%s%s%s' % (base_url, quote(url), '' if search == None else quote_plus(search), '' if params == None else params, searchExt), cookie=self.getCookie("session_adult=1" if xbmcaddon.Addon().getSetting('enableAdult') == 'true' else None))
         if "adult-content" in url_content:
             xbmcgui.Dialog().ok('Felnőtt tartalom!', 'Ez a tartalom olyan elemeket tartalmazhat, amelyek a hatályos jogszabályok kategóriái szerint kiskorúakra károsak lehetnek. A  hozzáférés jelenleg tiltott!')
             return                
@@ -155,14 +156,14 @@ class navigator:
         url = "%s%s" % ("" if "http" in url else "https:", url)
         STATIC_SECRET = 'xHb0ZvME5q8CBcoQi6AngerDu3FGO9fkUlwPmLVY_RTzj2hJIS4NasXWKy1td7p'
         xbmc.log('VideaNG: resolving url: %s' % url, xbmc.LOGINFO)
-        video_page = client.request(url, cookie="session_adult=1")
+        video_page = client.request(url, cookie=self.getCookie("session_adult=1"))
         if '/player' in url:
             player_url = url
             player_page = video_page
         else:
             player_url = re.search(r'<iframe.*?src="(/player\?[^"]+)"', video_page).group(1)
             player_url = urlparse.urljoin(url, player_url)
-            player_page = client.request(player_url)
+            player_page = client.request(player_url, cookie=self.getCookie(None))
         nonce = re.search(r'_xt\s*=\s*"([^"]+)"', player_page).group(1)
         l = nonce[:32]
         s = nonce[32:]
@@ -177,7 +178,7 @@ class navigator:
         _t = result[:16]
         if 'f' in query or 'v' in query:
             _param = 'f=%s' % query['f'][0] if 'f' in query else 'v=%s' % query['v'][0]
-        videaXml, headers, cookie = client.request('https://videa.hu/player/xml?platform=desktop&%s&_s=%s&_t=%s' % (_param, _s, _t), output='extended')
+        videaXml, headers, cookie = client.request('https://videa.hu/player/xml?platform=desktop&%s&_s=%s&_t=%s' % (_param, _s, _t), output='extended', cookie=self.getCookie(None))
         if not videaXml.startswith('<?xml'):
             key = result[16:] + random_seed + headers['x-videa-xs']
             videaXml = rc4(base64.b64decode(videaXml), key)
@@ -234,7 +235,7 @@ class navigator:
                             xbmc.log('VideaNG: subtitle count: %d' % len(subtitlesList), xbmc.LOGINFO)
                             for subtitle in subtitlesList:
                                 subtitleUrl = "%s%s" % ("" if "http" in subtitle["@src"] else "https:", subtitle["@src"])
-                                subtitleTxt = client.request(subtitleUrl)
+                                subtitleTxt = client.request(subtitleUrl, cookie=self.getCookie(None))
                                 if len(subtitleTxt) > 0:
                                     errMsg = "Hiba a sorozat felirat file kiírásakor!"
                                     file = safeopen(os.path.join(self.base_path, "subtitles", "%s.srt" % subtitle["@title"].strip()), "w")
@@ -314,3 +315,47 @@ class navigator:
         url = self.getText(u'Add meg a teljes videa URL-t!')
         if url != '':
             self.playmovie(url)
+
+    def login(self):
+        loggedIn = False
+        if xbmcaddon.Addon().getSetting('username') and xbmcaddon.Addon().getSetting('password'):
+            if xbmcaddon.Addon().getSetting('logincookie'):
+                t1 = int(xbmcaddon.Addon().getSetting('logincookie.timestamp'))
+                t2 = int(time.time())
+                if (abs(t2 - t1) / 3600) >= 24 or t1 == 0:
+                    content = client.request(base_url, cookie="sid=%s" % xbmcaddon.Addon().getSetting('logincookie'))
+                    if "top-menu-user-name" in content:
+                        loggedIn = True
+                        xbmcaddon.Addon().setSetting('logincookie.timestamp', str(t2))
+                else:
+                    loggedIn = True
+            if not loggedIn:
+                loginData={"cmd": "tryLoginByRequest", "userid": xbmcaddon.Addon().getSetting('username'), "password": xbmcaddon.Addon().getSetting('password')}
+                content, headers, cookie = client.request("%s/interface?logcmd=tryLoginByRequest" % base_url, post='json=%s' % json.dumps(loginData), output='extended')
+                if json.loads(content)["response"]["code"] == 0:
+                    cookies = (dict(i.split('=', 1) for i in cookie.split('; ')))
+                    xbmcaddon.Addon().setSetting('logincookie', cookies["sid"])
+                    xbmcaddon.Addon().setSetting('logincookie.timestamp', str(int(time.time())))
+                else:
+                    xbmcgui.Dialog().ok("Bejelentkezési hiba", "Hiba a bejelentkezés során! Kérlek ellenőrizd a felhasználó nevet, illetve a jelszavát!")
+                    xbmcaddon.Addon().setSetting('logincookie', "")
+                    xbmcaddon.Addon().setSetting('logincookie.timestamp', "0")
+
+    def getCookie(self, cookie):
+        retCookie = None
+        if cookie:
+            if xbmcaddon.Addon().getSetting('logincookie') != "":
+                retCookie = "sid=%s; %s" % (xbmcaddon.Addon().getSetting('logincookie'), cookie)
+            else:
+                retCookie = cookie
+        else:
+            retCookie = None if xbmcaddon.Addon().getSetting('logincookie') == "" else "sid=%s" % xbmcaddon.Addon().getSetting('logincookie')
+        return retCookie
+
+    def logout(self):
+        if 1 == xbmcgui.Dialog().yesno("Videa Next Generation", "Valóban ki szeretnél jelentkezni?", "", ""):
+            xbmcaddon.Addon().setSetting('username', "")
+            xbmcaddon.Addon().setSetting('password', "")
+            xbmcaddon.Addon().setSetting('logincookie', "")
+            xbmcaddon.Addon().setSetting('logincookie.timestamp', "0")
+            xbmcaddon.Addon().setSetting('enableAdult', "false")

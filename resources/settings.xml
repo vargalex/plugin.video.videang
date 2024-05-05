@@ -1,8 +1,15 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?>
 <settings>
     <category label="Általános">
-        <setting label="Videó minősége" type="enum" id="autopick" values="Választható|Legjobb" default="0" />
+        <setting label="Videó minősége" type="enum" id="autopick" values="Választható|Legjobb" default="0"/>
         <setting label="Felirat letöltésének kísérlete" type="bool" id="downloadsubtitles" default="True"/>
-        <setting label="Felnőtt tartalom engedélyezése" type="bool" id="enableAdult" default="false"/>
 	</category>
+    <category label="Bejelentkezés">
+        <setting label="Felhasználónév" type="text" id="username" default=""/>
+        <setting label="Jelszó" type="text" id="password" default=""/>
+        <setting id="logincookie" type="text" visible="false" default=""/>
+        <setting id="logincookie.timestamp" type="text" visible="false" default="0"/>
+        <setting label="Felnőtt tartalom engedélyezése" type="bool" id="enableAdult" default="false" visible="gt(-2, '')"/>
+        <setting id="logout" type="action" label="[B][COLOR red]Kijelentkezés[/COLOR][/B]" option="close" action="RunPlugin(plugin://plugin.video.videang/?action=logout)" visible="gt(-3,'')"/>
+    </category>
 </settings>

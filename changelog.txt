@@ -1,4 +1,7 @@
-﻿[B]1.0.8[/B]
+﻿[B]1.0.9[/B]
+- Bejelentkezés megvalósítása
+
+[B]1.0.8[/B]
 - Felirat letöltés megvalósítása (beállításokban kapcsolható)
 - Közvetlen URL lejátszása
 
