@@ -1,4 +1,7 @@
-﻿[B]1.0.9[/B]
+﻿[B]1.0.10[/B]
+- Bejelentkezett felhasználó menüpontjai
+
+[B]1.0.9[/B]
 - Bejelentkezés megvalósítása
 
 [B]1.0.8[/B]

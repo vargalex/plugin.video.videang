@@ -56,24 +56,34 @@ class navigator:
 
     def root(self):
         mainMenu = {'menu-categories': 'Kategóriák', 'menu-channels': 'Csatornák'}
+        if self.getCookie:
+            mainMenu.update({'menu-user': 'Saját', 'menu-follow': 'Követem'})
         for menuItem in mainMenu:
             self.addDirectoryItem(mainMenu[menuItem], 'submenus&url=%s' % menuItem, '', 'DefaultFolder.png')
-        self.addDirectoryItem('Közvetlen Videa URL lejátszása', 'playdirecturl', '', 'DefaultMovies.png', isFolder=False)
+        self.addDirectoryItem('Közvetlen Videa URL lejátszása', 'playvideaurl', '', 'DefaultMovies.png', isFolder=False)
+        #self.addDirectoryItem('Közvetlen URL lejátszása', 'playdirecturl', '', 'DefaultMovies.png', isFolder=False)
         self.addDirectoryItem('Keresés', 'search', '', 'DefaultFolder.png')
         self.endDirectory()
 
     def getSubmenus(self, url):
         url_content = client.request('%s' % base_url, cookie=self.getCookie(None))
+        url_content = re.sub("<!--.+?-->", "", url_content, flags=re.DOTALL)
         mainMenu = client.parseDOM(url_content, 'ul', attrs={'class': 'main-menu-list'})[0]
+        mainMenu = mainMenu.replace('<li id="follows-li">', '<li>')
         menuItems = client.parseDOM(mainMenu, 'li')
         for menuItem in menuItems:
             if ('id="%s"' % url in menuItem):
                 ul = client.parseDOM(menuItem, 'ul')[0]
                 subMenuItems = client.parseDOM(ul, 'li')
                 for subMenuItem in subMenuItems:
-                    name = client.parseDOM(subMenuItem, 'a')[0].encode('utf-8')
+                    name = client.parseDOM(subMenuItem, 'a')[0]
+                    span = client.parseDOM(name, 'span')
+                    if span:
+                        name = span[0]
+                    name = name.encode('utf-8')
                     href = client.parseDOM(subMenuItem, 'a', ret='href')[0].replace(base_url, '')
-                    self.addDirectoryItem(name, 'videos&url=%s' % quote_plus(href), '', 'DefaultFolder.png')
+                    if "/profil" not in href and "/belepes" not in href:
+                        self.addDirectoryItem(name, 'videos&url=%s' % quote_plus(href), '', 'DefaultFolder.png')
         self.endDirectory('movies')
 
     def doSearch(self):
@@ -85,6 +95,7 @@ class navigator:
             file.write("%s\n" % search_text)
             file.close()
             self.getVideos(url="/video_kereses/", search = search_text, params=None)
+        return
 
     def getVideos(self, url, params=None, search=None):
         searchExt = ''
@@ -100,7 +111,11 @@ class navigator:
                 searchExt = client.parseDOM(categoriesSelect, 'option', ret='value')[selectedCategory]
             else:
                 return
-        url_content = client.request('%s%s%s%s%s' % (base_url, quote(url), '' if search == None else quote_plus(search), '' if params == None else params, searchExt), cookie=self.getCookie("session_adult=1" if xbmcaddon.Addon().getSetting('enableAdult') == 'true' else None))
+        cookie = self.getCookie
+        if cookie:
+            cookie = "%s;" % cookie
+        cookie = "%s%s" % (cookie, self.getCookie("session_adult=1" if xbmcaddon.Addon().getSetting('enableAdult') == 'true' else ""))
+        url_content = client.request('%s%s%s%s%s' % (base_url, quote(url), '' if search == None else quote_plus(search), '' if params == None else params, searchExt), cookie=cookie)
         if "adult-content" in url_content:
             xbmcgui.Dialog().ok('Felnőtt tartalom!', 'Ez a tartalom olyan elemeket tartalmazhat, amelyek a hatályos jogszabályok kategóriái szerint kiskorúakra károsak lehetnek. A  hozzáférés jelenleg tiltott!')
             return                
@@ -122,7 +137,8 @@ class navigator:
             lis = client.parseDOM(pagination, 'li')[-1]
             kovetkezo = client.parseDOM(lis, 'a', ret='href')[0]
             self.addDirectoryItem(u'[I]K\u00F6vetkez\u0151 oldal >>[/I]', 'videos&url=%s%s&params=%s' % (quote_plus(url), '' if search == None else quote_plus(search), quote_plus(kovetkezo)), '', 'DefaultFolder.png')
-        self.endDirectory('movies')
+        self.endDirectory('movies', cache=True)
+        return
 
     def playmovie(self, url):
         def rc4(cipher_text, key):
@@ -311,10 +327,17 @@ class navigator:
         if os.path.exists(self.searchFileName):
             os.remove(self.searchFileName)
 
-    def playDirectUrl(self):
+    def playVideaUrl(self):
         url = self.getText(u'Add meg a teljes videa URL-t!')
         if url != '':
             self.playmovie(url)
+
+    def playDirectUrl(self):
+        direct_url = self.getText(u'Add meg a teljes URL-t!')
+        if direct_url != '':
+            play_item = xbmcgui.ListItem(path=direct_url)
+            xbmc.log("VideaNG: Playing url: %s" % direct_url, xbmc.LOGINFO)
+            xbmcplugin.setResolvedUrl(syshandle, True, listitem=play_item)
 
     def login(self):
         loggedIn = False
