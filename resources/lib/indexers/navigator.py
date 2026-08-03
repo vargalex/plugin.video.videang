@@ -55,9 +55,9 @@ class navigator:
         self.login()
 
     def root(self):
-        mainMenu = {'menu-categories': 'Kategóriák', 'menu-channels': 'Csatornák'}
+        mainMenu = {'categories foldable': 'Kategóriák', 'channels foldable': 'Csatornák'}
         if self.getCookie:
-            mainMenu.update({'menu-user': 'Saját', 'menu-follow': 'Követem'})
+            mainMenu.update({'my-pages': 'Saját', 'followed-channels foldable': 'Követem'})
         for menuItem in mainMenu:
             self.addDirectoryItem(mainMenu[menuItem], 'submenus&url=%s' % menuItem, '', 'DefaultFolder.png')
         self.addDirectoryItem('Közvetlen Videa URL lejátszása', 'playvideaurl', '', 'DefaultMovies.png', isFolder=False)
@@ -66,24 +66,18 @@ class navigator:
         self.endDirectory()
 
     def getSubmenus(self, url):
-        url_content = client.request('%s' % base_url, cookie=self.getCookie(None))
-        url_content = re.sub("<!--.+?-->", "", url_content, flags=re.DOTALL)
-        mainMenu = client.parseDOM(url_content, 'ul', attrs={'class': 'main-menu-list'})[0]
-        mainMenu = mainMenu.replace('<li id="follows-li">', '<li>')
+        url_content = client.request(base_url, cookie=self.getCookie(None))
+        if url_content:
+            url_content = re.sub("<!--.+?-->", "", url_content, flags=re.DOTALL)
+        mainMenu = client.parseDOM(url_content, 'ul', attrs={'class': url})[0]
         menuItems = client.parseDOM(mainMenu, 'li')
         for menuItem in menuItems:
-            if ('id="%s"' % url in menuItem):
-                ul = client.parseDOM(menuItem, 'ul')[0]
-                subMenuItems = client.parseDOM(ul, 'li')
-                for subMenuItem in subMenuItems:
-                    name = client.parseDOM(subMenuItem, 'a')[0]
-                    span = client.parseDOM(name, 'span')
-                    if span:
-                        name = span[0]
-                    name = name.encode('utf-8')
-                    href = client.parseDOM(subMenuItem, 'a', ret='href')[0].replace(base_url, '')
-                    if "/profil" not in href and "/belepes" not in href:
-                        self.addDirectoryItem(name, 'videos&url=%s' % quote_plus(href), '', 'DefaultFolder.png')
+            href = client.parseDOM(menuItem, 'a', ret='href')[0]
+            hrefInner = client.parseDOM(menuItem, 'a')[0]
+            fullDiv = client.parseDOM(hrefInner, 'div', attrs={'class': 'full'})[0]
+            text = client.parseDOM(fullDiv, 'span', attrs={'class': 'menu-text'})[0]
+            if "/profil" not in href and "/belepes" not in href:
+                self.addDirectoryItem(text, 'videos&url=%s&itemcount=0' % quote_plus(href), '', 'DefaultFolder.png')
         self.endDirectory('movies')
 
     def doSearch(self):
@@ -94,49 +88,66 @@ class navigator:
             file = open(self.searchFileName, "a")
             file.write("%s\n" % search_text)
             file.close()
-            self.getVideos(url="/video_kereses/", search = search_text, params=None)
+            self.getVideos(url="/kereses/" + search_text, cacheId=search_text, lastItemId=None, itemCount=0)
         return
 
-    def getVideos(self, url, params=None, search=None):
-        searchExt = ''
-        if not search == None:
-            url_content = client.request('%s%s' % (base_url, url), cookie=self.getCookie(None))
-            categoriesSelect = client.parseDOM(url_content, 'select', attrs={'name': 'sift'})[0]
-            categories = client.parseDOM(categoriesSelect, 'option')
-            allCategories = []
-            for category in categories:
-                allCategories.append(category)
-            selectedCategory = xbmcgui.Dialog().select("Kategória választás", allCategories, preselect = 0)
-            if selectedCategory >= 0:
-                searchExt = client.parseDOM(categoriesSelect, 'option', ret='value')[selectedCategory]
-            else:
-                return
+    def getVideos(self, url, cacheId = None, lastItemId = None, itemCount = 0):
+        cacheId = cacheId or ""
+        lastItemId = lastItemId or ""
+        localLastItemId = lastItemId
+        # searchExt = ''
+        # if not search == None:
+        #     url_content = client.request('%s%s' % (base_url, url), cookie=self.getCookie(None))
+        #     categoriesSelect = client.parseDOM(url_content, 'select', attrs={'name': 'sift'})[0]
+        #     categories = client.parseDOM(categoriesSelect, 'option')
+        #     allCategories = []
+        #     for category in categories:
+        #         allCategories.append(category)
+        #     selectedCategory = xbmcgui.Dialog().select("Kategória választás", allCategories, preselect = 0)
+        #     if selectedCategory >= 0:
+        #         searchExt = client.parseDOM(categoriesSelect, 'option', ret='value')[selectedCategory]
+        #     else:
+        #         return
         cookie = self.getCookie
         if cookie:
             cookie = "%s;" % cookie
         cookie = "%s%s" % (cookie, self.getCookie("session_adult=1" if xbmcaddon.Addon().getSetting('enableAdult') == 'true' else ""))
-        url_content = client.request('%s%s%s%s%s' % (base_url, quote(url), '' if search == None else quote_plus(search), '' if params == None else params, searchExt), cookie=cookie)
-        if "adult-content" in url_content:
+        url_content = client.request('%s/lazy%s?cacheId=%s&lastItemId=%s&itemCount=%d' % (base_url, quote(url), quote(cacheId), lastItemId, itemCount), cookie=cookie)
+        if url_content and "adult-content" in url_content:
             xbmcgui.Dialog().ok('Felnőtt tartalom!', 'Ez a tartalom olyan elemeket tartalmazhat, amelyek a hatályos jogszabályok kategóriái szerint kiskorúakra károsak lehetnek. A  hozzáférés jelenleg tiltott!')
             return                
-        videos = client.parseDOM(url_content, 'div', attrs={'class': 'panel panel-video'})
+        videos = client.parseDOM(url_content, 'div', attrs={'class': 'col video-item'})
         for video in videos:
-            heading = client.parseDOM(video, 'div', attrs={'class': 'panel-heading'})
-            href = client.parseDOM(heading, 'a', attrs={'class': 'video-link'}, ret='href')[0]
-            img = client.parseDOM(heading, 'a', attrs={'class': 'video-link'})[0]
-            img = client.parseDOM(img, 'img', attrs={'class': 'video-thumbnail'}, ret='src')[0]
-            durationStr = client.parseDOM(heading, 'span', attrs={'class': 'label label-black video-length'})[0]
-            duration = sum(x * int(t) for x, t in zip([3600, 60, 1], durationStr.split(":")))
-            body = client.parseDOM(video, 'div', attrs={'class': 'panel-body'})[0]
-            videotext = client.parseDOM(body, 'div', attrs={'class': 'panel-video-text'})[0]
-            videotitle = client.parseDOM(videotext, 'div', attrs={'class': 'panel-video-title'})[0]
-            title = client.replaceHTMLCodes(client.parseDOM(videotitle, 'a')[0]).encode('utf-8')
-            self.addDirectoryItem(title, 'playmovie&url=%s' % href, "%s%s" % ('' if 'http' in img else base_url, img), 'DefaultMovies.png', meta={'title': title, 'plot': '', 'duration': duration}, isFolder=False)
-        if "pagination" in url_content:
-            pagination = client.parseDOM(url_content, 'ul', attrs={'class': 'pagination'})
-            lis = client.parseDOM(pagination, 'li')[-1]
-            kovetkezo = client.parseDOM(lis, 'a', ret='href')[0]
-            self.addDirectoryItem(u'[I]K\u00F6vetkez\u0151 oldal >>[/I]', 'videos&url=%s%s&params=%s' % (quote_plus(url), '' if search == None else quote_plus(search), quote_plus(kovetkezo)), '', 'DefaultFolder.png')
+            itemCount += 1
+            localLastItemId = client.parseDOM(video, 'div', attrs={'class': 'videa-video-list-item.*?'}, ret='data-item-id')[0]
+            imgContainer = client.parseDOM(video, 'div', attrs={'class': 'image-container.*?'})
+            href = client.parseDOM(imgContainer, 'a', ret='href')[0]
+            hd = client.parseDOM(imgContainer, 'div', attrs={'class': 'hd'})
+            if hd:
+                hd = "[COLOR red] - HD[/COLOR]"
+            else:
+                hd = ""
+            durationStr = client.parseDOM(imgContainer, 'div', attrs={'class': 'length'})
+            if durationStr:
+                duration = sum(x * int(t) for x, t in zip([1, 60, 3600], durationStr[0].split(":")[::-1]))
+            else:
+                duration = 0
+            img = client.parseDOM(video, 'div', attrs={'class': 'image-container.*?'}, ret='data-image')[0]
+            infoBox = client.parseDOM(video, 'div', attrs={'class': 'info-box'})[0]
+            title = client.parseDOM(infoBox, 'h2', attrs={'class': 'title'})[0]
+            #title = client.replaceHTMLCodes(client.parseDOM(title, 'a', ret='title')[0])
+            title = client.parseDOM(title, 'a', ret='title')[0]
+            otherInfos = client.parseDOM(infoBox, 'div', attrs={'class': 'other-infos'})[0]
+            viewCount = client.parseDOM(otherInfos, 'div', attrs={'class': 'view-count'})[0]
+            uploadAt = client.parseDOM(otherInfos, 'div', attrs={'class': 'uploaded-at'})[0]
+            extrainfo = " - [COLOR yellow] " + viewCount + "[/COLOR] - [COLOR blue]feltöltve: " + uploadAt + "[/COLOR]"
+            self.addDirectoryItem("%s%s%s" % (title, hd, extrainfo), 'playmovie&url=%s' % href, "%s%s" % ('' if 'http' in img else base_url, img), 'DefaultMovies.png', meta={'title': title, 'plot': '', 'duration': duration}, isFolder=False)
+        #if "pagination" in url_content:
+            # pagination = client.parseDOM(url_content, 'ul', attrs={'class': 'pagination.*?'})
+            # lis = client.parseDOM(pagination, 'li')[-1]
+            # kovetkezo = client.parseDOM(lis, 'a', ret='href')[0]
+        if localLastItemId != lastItemId:
+            self.addDirectoryItem(u'[I]K\u00F6vetkez\u0151 oldal >>[/I]', 'videos&url=%s&cacheid=%s&lastitemid=%s&itemcount=%d' % (quote_plus(url), cacheId, localLastItemId, itemCount), '', 'DefaultFolder.png')
         self.endDirectory('movies', cache=True)
         return
 
@@ -316,7 +327,7 @@ class navigator:
                 file.write("\n".join(items))
                 file.close()
             for item in items:
-                self.addDirectoryItem(item, 'videos&url=/video_kereses/&search=%s' % quote_plus(item), '', 'DefaultFolder.png')
+                self.addDirectoryItem(item, 'videos&url=/kereses/%s&cacheid=%s&lastitemid=&itemcount=0' % (quote_plus(item), quote_plus(item)), '', 'DefaultFolder.png')
             if len(items) > 0:
                 self.addDirectoryItem('[COLOR red]Keresési előzmények törlése[/COLOR]', 'deletesearchhistory', '', 'DefaultFolder.png')
         except:

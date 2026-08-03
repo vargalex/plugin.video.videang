@@ -32,10 +32,13 @@ action = params.get('action')
 
 url = params.get('url')
 
-search = params.get('search')
+cacheId = params.get('cacheid')
 
-params = params.get('params')
+lastItemId = params.get('lastitemid')
 
+itemCount = params.get('itemcount')
+
+itemCount = int(itemCount or 0)
 
 from resources.lib.indexers import navigator
 
@@ -47,7 +50,7 @@ elif action == 'submenus':
 
 
 elif action == 'videos':
-    navigator.navigator().getVideos(url, params, search)
+    navigator.navigator().getVideos(url, cacheId, lastItemId, itemCount)
 
 elif action == 'playmovie':
     navigator.navigator().playmovie(url)

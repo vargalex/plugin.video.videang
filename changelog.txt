@@ -1,4 +1,7 @@
 ﻿[B]1.0.10[/B]
+- Forrás változás miatt újraírás, új API használata
+
+[B]1.0.10[/B]
 - Bejelentkezett felhasználó menüpontjai
 
 [B]1.0.9[/B]
