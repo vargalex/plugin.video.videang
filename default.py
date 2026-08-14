@@ -32,6 +32,8 @@ action = params.get('action')
 
 url = params.get('url')
 
+ulclass = params.get('ulclass')
+
 cacheId = params.get('cacheid')
 
 lastItemId = params.get('lastitemid')
@@ -45,9 +47,11 @@ from resources.lib.indexers import navigator
 if action == None:
     navigator.navigator().root()
 
-elif action == 'submenus':
-    navigator.navigator().getSubmenus(url)
+if action == 'menus':
+    navigator.navigator().menus(url)
 
+elif action == 'submenus':
+    navigator.navigator().getSubmenus(url, ulclass)
 
 elif action == 'videos':
     navigator.navigator().getVideos(url, cacheId, lastItemId, itemCount)
@@ -56,13 +60,13 @@ elif action == 'playmovie':
     navigator.navigator().playmovie(url)
 
 elif action == 'search':
-    navigator.navigator().getSearches()
+    navigator.navigator().getSearches(url)
 
 elif action == 'newsearch':
-    navigator.navigator().doSearch()
+    navigator.navigator().doSearch(url)
 
 elif action == 'deletesearchhistory':
-    navigator.navigator().deleteSearchHistory()
+    navigator.navigator().deleteSearchHistory(url)
 
 elif action == 'playvideaurl':
     navigator.navigator().playVideaUrl()

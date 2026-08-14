@@ -37,6 +37,7 @@ sysaddon = sys.argv[0] ; syshandle = int(sys.argv[1])
 addonFanart = xbmcaddon.Addon().getAddonInfo('fanart')
 
 base_url = 'https://videa.hu'
+searchDelimiter = "#&$&#"
 
 class navigator:
 
@@ -55,67 +56,85 @@ class navigator:
         self.login()
 
     def root(self):
-        mainMenu = {'categories foldable': 'Kategóriák', 'channels foldable': 'Csatornák'}
-        if self.getCookie:
-            mainMenu.update({'my-pages': 'Saját', 'followed-channels foldable': 'Követem'})
-        for menuItem in mainMenu:
-            self.addDirectoryItem(mainMenu[menuItem], 'submenus&url=%s' % menuItem, '', 'DefaultFolder.png')
+        url_content = client.request(base_url, cookie=self.getCookie(None))
+        sideMenu = client.parseDOM(url_content, 'nav', attrs={'id': 'side-menu'})[0]
+        products = client.parseDOM(sideMenu, 'ul', attrs={'class': 'products'})[0]
+        products = client.parseDOM(products, 'li')
+        logo = client.parseDOM(url_content, 'a', attrs={'class': 'logo'})[0]
+        logourl = client.parseDOM(logo, 'img', ret='src')[0]
+        self.addDirectoryItem('Videa', 'menus&url=%s' % base_url, '', '%s%s' % (base_url, logourl))
+        for product in products:
+            url = client.parseDOM(product, 'a', ret='href')[0]
+            full = client.parseDOM(product, 'div', attrs={'class': 'full'})[0]
+            logourl = client.parseDOM(full, 'img', ret='src')[0]
+            text = client.parseDOM(full, 'img', ret='alt')[0].split()[0]
+            if url.startswith("//"):
+                url = "https:%s" % url
+            else:
+                url = "%s%s" % (base_url, url)
+            self.addDirectoryItem(text, 'menus&url=%s' % url, '', '%s%s' % (base_url, logourl))
         self.addDirectoryItem('Közvetlen Videa URL lejátszása', 'playvideaurl', '', 'DefaultMovies.png', isFolder=False)
-        #self.addDirectoryItem('Közvetlen URL lejátszása', 'playdirecturl', '', 'DefaultMovies.png', isFolder=False)
-        self.addDirectoryItem('Keresés', 'search', '', 'DefaultFolder.png')
         self.endDirectory()
 
-    def getSubmenus(self, url):
-        url_content = client.request(base_url, cookie=self.getCookie(None))
+    def menus(self, url):
+        url_content = client.request(url, cookie=(self.getCookie(None) if "videa.hu" in url else None))
+        sideMenu = client.parseDOM(url_content, 'nav', attrs={'id': 'side-menu'})[0]
+        ulclasses = client.parseDOM(sideMenu, 'ul', ret="class")
+        uls = client.parseDOM(sideMenu, 'ul')
+        for ulclass, ul in zip(ulclasses, uls):
+            if ulclass != "products":
+                title = client.parseDOM(ul, 'div', attrs={'class': 'nav-group-title.*?'})[0]
+                self.addDirectoryItem(title, 'submenus&url=%s&ulclass=%s' % (url, ulclass), '', 'DefaultFolder.png')
+        self.addDirectoryItem('Keresés', 'search&url=%s' % url, '', 'DefaultFolder.png')
+        self.endDirectory()
+
+    def getSubmenus(self, url, ulclass):
+        splittedUrl = urlparse.urlsplit(url)
+        baseUrl = "%s://%s" % (splittedUrl.scheme, splittedUrl.netloc)
+        url_content = client.request(url, cookie=(self.getCookie(None) if "videa.hu" in url else None))
         if url_content:
             url_content = re.sub("<!--.+?-->", "", url_content, flags=re.DOTALL)
-        mainMenu = client.parseDOM(url_content, 'ul', attrs={'class': url})[0]
+        mainMenu = client.parseDOM(url_content, 'ul', attrs={'class': ulclass})[0]
         menuItems = client.parseDOM(mainMenu, 'li')
         for menuItem in menuItems:
             href = client.parseDOM(menuItem, 'a', ret='href')[0]
-            hrefInner = client.parseDOM(menuItem, 'a')[0]
-            fullDiv = client.parseDOM(hrefInner, 'div', attrs={'class': 'full'})[0]
-            text = client.parseDOM(fullDiv, 'span', attrs={'class': 'menu-text'})[0]
-            if "/profil" not in href and "/belepes" not in href:
-                self.addDirectoryItem(text, 'videos&url=%s&itemcount=0' % quote_plus(href), '', 'DefaultFolder.png')
+            if href != "#":
+                hrefInner = client.parseDOM(menuItem, 'a')[0]
+                fullDiv = client.parseDOM(hrefInner, 'div', attrs={'class': 'full'})[0]
+                text = client.parseDOM(fullDiv, 'span', attrs={'class': 'menu-text'})[0]
+                if "/profil" not in href and "/belepes" not in href:
+                    self.addDirectoryItem(text, 'videos&url=%s&itemcount=0' % quote_plus("%s%s" % (baseUrl, href)), '', 'DefaultFolder.png')
         self.endDirectory('movies')
 
-    def doSearch(self):
+    def doSearch(self, url):
         search_text = self.getText(u'Add meg a keresend\xF5 film c\xEDm\xE9t')
         if search_text != '':
             if not os.path.exists(self.base_path):
                 os.mkdir(self.base_path)
-            file = open(self.searchFileName, "a")
-            file.write("%s\n" % search_text)
+            lines = []
+            if os.path.exists(self.searchFileName):
+                file = open(self.searchFileName, "r")
+                lines = file.read().splitlines()
+                file.close()
+            lines.append("%s%s%s" % (url, searchDelimiter, search_text))
+            file = open(self.searchFileName, "w")
+            file.write("\n".join(lines))
             file.close()
-            self.getVideos(url="/kereses/" + search_text, cacheId=search_text, lastItemId=None, itemCount=0)
-        return
+            splittedUrl = urlparse.urlsplit(url)
+            baseUrl = "%s://%s" % (splittedUrl.scheme, splittedUrl.netloc)
+            self.getVideos(url="%s/kereses/%s" % (baseUrl, quote(search_text)), cacheId=search_text, lastItemId=None, itemCount=0)
+        #return
 
     def getVideos(self, url, cacheId = None, lastItemId = None, itemCount = 0):
         cacheId = cacheId or ""
         lastItemId = lastItemId or ""
         localLastItemId = lastItemId
-        # searchExt = ''
-        # if not search == None:
-        #     url_content = client.request('%s%s' % (base_url, url), cookie=self.getCookie(None))
-        #     categoriesSelect = client.parseDOM(url_content, 'select', attrs={'name': 'sift'})[0]
-        #     categories = client.parseDOM(categoriesSelect, 'option')
-        #     allCategories = []
-        #     for category in categories:
-        #         allCategories.append(category)
-        #     selectedCategory = xbmcgui.Dialog().select("Kategória választás", allCategories, preselect = 0)
-        #     if selectedCategory >= 0:
-        #         searchExt = client.parseDOM(categoriesSelect, 'option', ret='value')[selectedCategory]
-        #     else:
-        #         return
-        cookie = self.getCookie
+        cookie = (self.getCookie(None) if "videa.hu" in url else None)
         if cookie:
             cookie = "%s;" % cookie
-        cookie = "%s%s" % (cookie, self.getCookie("session_adult=1" if xbmcaddon.Addon().getSetting('enableAdult') == 'true' else ""))
-        url_content = client.request('%s/lazy%s?cacheId=%s&lastItemId=%s&itemCount=%d' % (base_url, quote(url), quote(cacheId), lastItemId, itemCount), cookie=cookie)
-        if url_content and "adult-content" in url_content:
-            xbmcgui.Dialog().ok('Felnőtt tartalom!', 'Ez a tartalom olyan elemeket tartalmazhat, amelyek a hatályos jogszabályok kategóriái szerint kiskorúakra károsak lehetnek. A  hozzáférés jelenleg tiltott!')
-            return                
+        lazyurl = url.replace(".hu/", ".hu/lazy/")
+        xbmc.log("VideaNG requesting: %s" % ('%s?cacheId=%s&lastItemId=%s&itemCount=%d' % (lazyurl, quote(cacheId), lastItemId, itemCount)), xbmc.LOGINFO)
+        url_content = client.request('%s?cacheId=%s&lastItemId=%s&itemCount=%d' % (lazyurl, quote(cacheId), lastItemId, itemCount), cookie=cookie)
         videos = client.parseDOM(url_content, 'div', attrs={'class': 'col video-item'})
         for video in videos:
             itemCount += 1
@@ -147,7 +166,7 @@ class navigator:
             # lis = client.parseDOM(pagination, 'li')[-1]
             # kovetkezo = client.parseDOM(lis, 'a', ret='href')[0]
         if localLastItemId != lastItemId:
-            self.addDirectoryItem(u'[I]K\u00F6vetkez\u0151 oldal >>[/I]', 'videos&url=%s&cacheid=%s&lastitemid=%s&itemcount=%d' % (quote_plus(url), cacheId, localLastItemId, itemCount), '', 'DefaultFolder.png')
+            self.addDirectoryItem(u'[I]K\u00F6vetkez\u0151 oldal >>[/I]', 'videos&url=%s&cacheid=%s&lastitemid=%s&itemcount=%d' % (quote(url), quote(cacheId), localLastItemId, itemCount), '', 'DefaultFolder.png')
         self.endDirectory('movies', cache=True)
         return
 
@@ -183,14 +202,14 @@ class navigator:
         url = "%s%s" % ("" if "http" in url else "https:", url)
         STATIC_SECRET = 'xHb0ZvME5q8CBcoQi6AngerDu3FGO9fkUlwPmLVY_RTzj2hJIS4NasXWKy1td7p'
         xbmc.log('VideaNG: resolving url: %s' % url, xbmc.LOGINFO)
-        video_page = client.request(url, cookie=self.getCookie("session_adult=1"))
+        video_page = client.request(url, cookie=(self.getCookie(None) if "videa.hu" in url else None))
         if '/player' in url:
             player_url = url
             player_page = video_page
         else:
             player_url = re.search(r'<iframe.*?src="(/player\?[^"]+)"', video_page).group(1)
             player_url = urlparse.urljoin(url, player_url)
-            player_page = client.request(player_url, cookie=self.getCookie(None))
+            player_page = client.request(player_url, cookie=(self.getCookie(None) if "videa.hu" in url else None))
         nonce = re.search(r'_xt\s*=\s*"([^"]+)"', player_page).group(1)
         l = nonce[:32]
         s = nonce[32:]
@@ -314,29 +333,41 @@ class navigator:
 
         return py2_encode(search_text)
 
-    def getSearches(self):
-        self.addDirectoryItem('[COLOR lightblue]Új keresés[/COLOR]', 'newsearch', '', 'DefaultFolder.png')
+    def getSearches(self, url):
+        self.addDirectoryItem('[COLOR lightblue]Új keresés[/COLOR]', 'newsearch&url=%s' % url, '', 'DefaultFolder.png')
         try:
             file = open(self.searchFileName, "r")
-            olditems = file.read().splitlines()
+            data = file.read()
             file.close()
-            items = list(set(olditems))
+            items = list({
+                sor.strip().split(searchDelimiter)[1]
+                for sor in data.splitlines()
+                if sor.startswith("%s%s" % (url, searchDelimiter))
+            })
             items.sort(key=locale.strxfrm)
-            if len(items) != len(olditems):
-                file = open(self.searchFileName, "w")
-                file.write("\n".join(items))
-                file.close()
+            splittedUrl = urlparse.urlsplit(url)
+            baseUrl = "%s://%s" % (splittedUrl.scheme, splittedUrl.netloc)
             for item in items:
-                self.addDirectoryItem(item, 'videos&url=/kereses/%s&cacheid=%s&lastitemid=&itemcount=0' % (quote_plus(item), quote_plus(item)), '', 'DefaultFolder.png')
+                self.addDirectoryItem(item, 'videos&url=%s/kereses/%s&cacheid=%s&lastitemid=&itemcount=0' % (quote_plus(baseUrl), quote(quote(item)), quote(item)), '', 'DefaultFolder.png')
             if len(items) > 0:
-                self.addDirectoryItem('[COLOR red]Keresési előzmények törlése[/COLOR]', 'deletesearchhistory', '', 'DefaultFolder.png')
+                self.addDirectoryItem('[COLOR red]Keresési előzmények törlése[/COLOR]', 'deletesearchhistory&url=%s' % url, '', 'DefaultFolder.png')
         except:
             pass
         self.endDirectory(cache=False)
 
-    def deleteSearchHistory(self):
+    def deleteSearchHistory(self, url):
         if os.path.exists(self.searchFileName):
-            os.remove(self.searchFileName)
+            file = open(self.searchFileName, "r")
+            data = file.read()
+            file.close()
+            items = list({
+                sor
+                for sor in data.splitlines()
+                if searchDelimiter in sor and not sor.startswith("%s%s" % (url, searchDelimiter))
+            })
+            file = open(self.searchFileName, "w")
+            file.write("\n".join(items))
+            file.close()
 
     def playVideaUrl(self):
         url = self.getText(u'Add meg a teljes videa URL-t!')

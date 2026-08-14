@@ -1,4 +1,7 @@
-﻿[B]1.0.10[/B]
+﻿[B]1.0.12[/B]
+- Videa aloldalak támogatása (VideaKid, VideaX, stb.)
+
+[B]1.0.11[/B]
 - Forrás változás miatt újraírás, új API használata
 
 [B]1.0.10[/B]
