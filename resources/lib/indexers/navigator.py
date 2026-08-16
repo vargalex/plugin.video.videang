@@ -132,9 +132,20 @@ class navigator:
         cookie = (self.getCookie(None) if "videa.hu" in url else None)
         if cookie:
             cookie = "%s;" % cookie
-        lazyurl = url.replace(".hu/", ".hu/lazy/")
+        lazyurl = url if "/lazy/" in url else url.replace(".hu/", ".hu/lazy/")
         xbmc.log("VideaNG requesting: %s" % ('%s?cacheId=%s&lastItemId=%s&itemCount=%d' % (lazyurl, quote(cacheId), lastItemId, itemCount)), xbmc.LOGINFO)
         url_content = client.request('%s?cacheId=%s&lastItemId=%s&itemCount=%d' % (lazyurl, quote(cacheId), lastItemId, itemCount), cookie=cookie)
+        if not url_content and itemCount == 0:
+            # A számított lazy URL nem minden oldaltípusra érvényes (pl. csatornáknál a /tagok/<id> helyett
+            # /lazy/csatornak/<másik id> a helyes), ezért az eredeti oldal HTML-jéből olvassuk ki a valódi lazy URL-t.
+            page_content = client.request(url, cookie=cookie)
+            match = re.search(r'lazy_load_urls["\']?\s*:\s*\{[^{}]*?"videok"\s*:\s*"([^"]+)"', page_content or "")
+            if match:
+                lazyurl = match.group(1).replace("\\/", "/")
+                if lazyurl.startswith("/"):
+                    splittedUrl = urlparse.urlsplit(url)
+                    lazyurl = "%s://%s%s" % (splittedUrl.scheme, splittedUrl.netloc, lazyurl)
+                url_content = client.request('%s?cacheId=%s&lastItemId=%s&itemCount=%d' % (lazyurl, quote(cacheId), lastItemId, itemCount), cookie=cookie)
         videos = client.parseDOM(url_content, 'div', attrs={'class': 'col video-item'})
         for video in videos:
             itemCount += 1
@@ -166,7 +177,7 @@ class navigator:
             # lis = client.parseDOM(pagination, 'li')[-1]
             # kovetkezo = client.parseDOM(lis, 'a', ret='href')[0]
         if localLastItemId != lastItemId:
-            self.addDirectoryItem(u'[I]K\u00F6vetkez\u0151 oldal >>[/I]', 'videos&url=%s&cacheid=%s&lastitemid=%s&itemcount=%d' % (quote(url), quote(cacheId), localLastItemId, itemCount), '', 'DefaultFolder.png')
+            self.addDirectoryItem(u'[I]K\u00F6vetkez\u0151 oldal >>[/I]', 'videos&url=%s&cacheid=%s&lastitemid=%s&itemcount=%d' % (quote(lazyurl), quote(cacheId), localLastItemId, itemCount), '', 'DefaultFolder.png')
         self.endDirectory('movies', cache=True)
         return
 
@@ -296,7 +307,7 @@ class navigator:
                                 play_item.setSubtitles(subtitles)
                         except:
                             xbmcgui.Dialog().notification("Videa Next Generation hiba", errMsg, xbmcgui.NOTIFICATION_ERROR)
-                            xbmc.log("VideaNG: Hiba a %s URL-hez tartozó felirat letöltésekor, hiba: %s" % (py2_encode(final_url), py2_encode(errMsg)), xbmc.LOGERROR)
+                            xbmc.log("VideaNG: Hiba a %s URL-hez tartozó felirat letöltésekor, hiba: %s" % (py2_encode(direct_url), py2_encode(errMsg)), xbmc.LOGERROR)
                     else:
                         xbmc.log("VideaNG: Could not find any subtitles", xbmc.LOGINFO)
                 xbmc.log("VideaNG: Playing url: %s" % direct_url, xbmc.LOGINFO)
@@ -423,4 +434,3 @@ class navigator:
             xbmcaddon.Addon().setSetting('password', "")
             xbmcaddon.Addon().setSetting('logincookie', "")
             xbmcaddon.Addon().setSetting('logincookie.timestamp', "0")
-            xbmcaddon.Addon().setSetting('enableAdult', "false")
