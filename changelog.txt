@@ -1,4 +1,7 @@
-﻿[B]1.0.13[/B]
+﻿[B]1.0.14[/B]
+- Keresés: találatok stabil útvonalra irányítása lejátszás utáni visszalépéshez
+
+[B]1.0.13[/B]
 - BugFix, lazy url megállapításának javítása
 
 [B]1.0.12[/B]

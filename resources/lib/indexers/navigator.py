@@ -107,6 +107,10 @@ class navigator:
         self.endDirectory('movies')
 
     def doSearch(self, url):
+        # A newsearch mappát azonnal lezárjuk, MIELŐTT a billentyűzet feljön. Így mire a keresőszó megvan,
+        # Kodi már nincs "updating in progress" állapotban, és a lentebbi Container.Update ténylegesen navigál
+        # a találatokra (különben a folyamatban lévő mappa-frissítés eldobja az átirányítást).
+        xbmcplugin.endOfDirectory(syshandle, succeeded=False, cacheToDisc=False)
         search_text = self.getText(u'Add meg a keresend\xF5 film c\xEDm\xE9t')
         if search_text != '':
             if not os.path.exists(self.base_path):
@@ -122,7 +126,13 @@ class navigator:
             file.close()
             splittedUrl = urlparse.urlsplit(url)
             baseUrl = "%s://%s" % (splittedUrl.scheme, splittedUrl.netloc)
-            self.getVideos(url="%s/kereses/%s" % (baseUrl, quote(search_text)), cacheId=search_text, lastItemId=None, itemCount=0)
+            # A találatokat egy stabil "videos" útvonalra irányítjuk (nem inline getVideos), hogy lejátszás után
+            # a visszalépés a találatokra térjen vissza, ne a keresőmező (newsearch) újbóli megnyitására. Ugyanarra
+            # a videos útvonalra megyünk, mint amit a keresési előzmények elemei is használnak (a mappát fentebb már
+            # lezártuk, ezért itt a Container.Update már navigál).
+            searchUrl = '%s?action=videos&url=%s/kereses/%s&cacheid=%s&lastitemid=&itemcount=0' % (sysaddon, quote_plus(baseUrl), quote(quote(search_text)), quote(search_text))
+            xbmc.log("VideaNG search redirect: %s" % searchUrl, xbmc.LOGINFO)
+            xbmc.executebuiltin('Container.Update(%s)' % searchUrl)
         #return
 
     def getVideos(self, url, cacheId = None, lastItemId = None, itemCount = 0):
