@@ -148,13 +148,22 @@ class navigator:
         if not url_content and itemCount == 0:
             # A számított lazy URL nem minden oldaltípusra érvényes (pl. csatornáknál a /tagok/<id> helyett
             # /lazy/csatornak/<másik id> a helyes), ezért az eredeti oldal HTML-jéből olvassuk ki a valódi lazy URL-t.
+            xbmc.log("VideaNG requesting: %s" % url, xbmc.LOGINFO)
             page_content = client.request(url, cookie=cookie)
-            match = re.search(r'lazy_load_urls["\']?\s*:\s*\{[^{}]*?"videok"\s*:\s*"([^"]+)"', page_content or "")
+            if "kedvenc_videoim" in url:
+                lazyLoadTitle = "kedvencek"
+            elif "videolistaim" in url:
+                lazyLoadTitle = "videolistak"
+            else:
+                lazyLoadTitle = "videok"
+            match = re.search(r'lazy_load_urls["\']?\s*:\s*\{[^{}]*?"%s"\s*:\s*"([^"]+)"' % lazyLoadTitle, page_content or "")
             if match:
                 lazyurl = match.group(1).replace("\\/", "/")
+                xbmc.log("VideaNG lazy_load_urls matching. Lazyurl: %s" % lazyurl, xbmc.LOGINFO)
                 if lazyurl.startswith("/"):
                     splittedUrl = urlparse.urlsplit(url)
                     lazyurl = "%s://%s%s" % (splittedUrl.scheme, splittedUrl.netloc, lazyurl)
+                xbmc.log("VideaNG requesting: %s" % ('%s?cacheId=%s&lastItemId=%s&itemCount=%d' % (lazyurl, quote(cacheId), lastItemId, itemCount)), xbmc.LOGINFO)
                 url_content = client.request('%s?cacheId=%s&lastItemId=%s&itemCount=%d' % (lazyurl, quote(cacheId), lastItemId, itemCount), cookie=cookie)
         videos = client.parseDOM(url_content, 'div', attrs={'class': 'col video-item'})
         for video in videos:
