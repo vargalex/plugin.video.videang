@@ -59,6 +59,9 @@ elif action == 'videos':
 elif action == 'playmovie':
     navigator.navigator().playmovie(url)
 
+elif action == 'playlist':
+    navigator.navigator().getPlaylist(url)
+
 elif action == 'search':
     navigator.navigator().getSearches(url)
 

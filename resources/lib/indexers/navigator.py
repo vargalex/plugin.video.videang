@@ -190,13 +190,53 @@ class navigator:
             viewCount = client.parseDOM(otherInfos, 'div', attrs={'class': 'view-count'})[0]
             uploadAt = client.parseDOM(otherInfos, 'div', attrs={'class': 'uploaded-at'})[0]
             extrainfo = " - [COLOR yellow] " + viewCount + "[/COLOR] - [COLOR blue]feltöltve: " + uploadAt + "[/COLOR]"
-            self.addDirectoryItem("%s%s%s" % (title, hd, extrainfo), 'playmovie&url=%s' % href, "%s%s" % ('' if 'http' in img else base_url, img), 'DefaultMovies.png', meta={'title': title, 'plot': '', 'duration': duration}, isFolder=False)
+            if '/lejatszasilista/' in href:
+                # A lejátszási lista nem videó, hanem videók listája -> mappaként adjuk hozzá, a getPlaylist listázza.
+                splitted = urlparse.urlsplit(url)
+                plurl = href if href.startswith('http') else ('https:' + href if href.startswith('//') else "%s://%s%s" % (splitted.scheme, splitted.netloc, href))
+                self.addDirectoryItem("%s%s%s" % (title, hd, extrainfo), 'playlist&url=%s' % quote_plus(plurl), "%s%s" % ('' if 'http' in img else base_url, img), 'DefaultFolder.png', meta={'title': title, 'plot': ''})
+            else:
+                self.addDirectoryItem("%s%s%s" % (title, hd, extrainfo), 'playmovie&url=%s' % href, "%s%s" % ('' if 'http' in img else base_url, img), 'DefaultMovies.png', meta={'title': title, 'plot': '', 'duration': duration}, isFolder=False)
         #if "pagination" in url_content:
             # pagination = client.parseDOM(url_content, 'ul', attrs={'class': 'pagination.*?'})
             # lis = client.parseDOM(pagination, 'li')[-1]
             # kovetkezo = client.parseDOM(lis, 'a', ret='href')[0]
         if localLastItemId != lastItemId:
             self.addDirectoryItem(u'[I]K\u00F6vetkez\u0151 oldal >>[/I]', 'videos&url=%s&cacheid=%s&lastitemid=%s&itemcount=%d' % (quote(lazyurl), quote(cacheId), localLastItemId, itemCount), '', 'DefaultFolder.png')
+        self.endDirectory('movies', cache=True)
+        return
+
+    def getPlaylist(self, url):
+        # A lejátszási lista oldala szerver-renderelt (nincs /lazy/), a videók a "form-edit-videolist-item video"
+        # elemekben vannak. Az elem belseje megegyezik a col video-item-ével, kivéve hogy a cím az anchor
+        # szövegében van (nincs title attribútum).
+        cookie = (self.getCookie(None) if "videa.hu" in url else None)
+        url_content = client.request(url, cookie=cookie)
+        videos = client.parseDOM(url_content, 'div', attrs={'class': 'form-edit-videolist-item video'})
+        for video in videos:
+            imgContainer = client.parseDOM(video, 'div', attrs={'class': 'image-container.*?'})
+            href = client.parseDOM(imgContainer, 'a', ret='href')[0]
+            hd = client.parseDOM(imgContainer, 'div', attrs={'class': 'hd'})
+            if hd:
+                hd = "[COLOR red] - HD[/COLOR]"
+            else:
+                hd = ""
+            durationStr = client.parseDOM(imgContainer, 'div', attrs={'class': 'length'})
+            if durationStr:
+                duration = sum(x * int(t) for x, t in zip([1, 60, 3600], durationStr[0].split(":")[::-1]))
+            else:
+                duration = 0
+            img = client.parseDOM(video, 'div', attrs={'class': 'image-container.*?'}, ret='data-image')[0]
+            title = client.parseDOM(video, 'h2', attrs={'class': 'title'})[0]
+            title = client.parseDOM(title, 'a')[0].strip()
+            otherInfos = client.parseDOM(video, 'div', attrs={'class': 'other-infos'})
+            extrainfo = ""
+            if otherInfos:
+                viewCount = client.parseDOM(otherInfos, 'div', attrs={'class': 'view-count'})
+                uploadAt = client.parseDOM(otherInfos, 'div', attrs={'class': 'uploaded-at'})
+                if viewCount and uploadAt:
+                    extrainfo = " - [COLOR yellow] " + viewCount[0] + "[/COLOR] - [COLOR blue]feltöltve: " + uploadAt[0] + "[/COLOR]"
+            self.addDirectoryItem("%s%s%s" % (title, hd, extrainfo), 'playmovie&url=%s' % href, "%s%s" % ('' if 'http' in img else base_url, img), 'DefaultMovies.png', meta={'title': title, 'plot': '', 'duration': duration}, isFolder=False)
         self.endDirectory('movies', cache=True)
         return
 
